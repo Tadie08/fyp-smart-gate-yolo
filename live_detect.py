@@ -3,25 +3,24 @@ import numpy as np
 import onnxruntime as ort
 import pytesseract
 import requests
-import base64
 import re
 import time
 from picamera2 import Picamera2
 from behaviour import init_db, gate_decision
+from gate_control import execute_decision, cleanup, get_distance, car_detected
 
 # ─────────────────────────────
 # CONFIG
 # ─────────────────────────────
 MODEL_PATH = "models/best_nano.onnx"
-EDGE_CONF_THRESHOLD = 0.75    # Above this = use Tesseract locally
-CLOUD_CONF_THRESHOLD = 0.30   # Between 0.30-0.75 = use Plate Recognizer
+EDGE_CONF_THRESHOLD = 0.75
+CLOUD_CONF_THRESHOLD = 0.30
 IMG_SIZE = 640
 
 PLATE_RECOGNIZER_TOKEN = "e8628359fce05e8b1ef7f79a7de7d9e76dbe49ea"
 
-WHITELIST = ["ABC123", "ML773", "WXY1234", "YZ3527"]
+WHITELIST = ["ABC123", "ML773", "TX8971", "YZ3527"]
 
-# Counters for cloud reduction metric
 stats = {
     "total": 0,
     "cache_hits": 0,
@@ -45,9 +44,9 @@ print("YOLO model loaded!")
 # ─────────────────────────────
 init_db()
 
-# Simple in-memory cache (Redis replacement for now)
+# In-memory cache
 plate_cache = {}
-CACHE_TTL = 300  # 5 minutes
+CACHE_TTL = 300
 
 # ─────────────────────────────
 # INIT CAMERA
@@ -139,18 +138,15 @@ def cloud_ocr(plate_crop):
     if plate_crop.size == 0:
         return "UNKNOWN"
     try:
-        # Encode image
         _, buffer = cv2.imencode('.jpg',
                     cv2.cvtColor(plate_crop, cv2.COLOR_RGB2BGR))
         img_bytes = buffer.tobytes()
-
         response = requests.post(
             'https://api.platerecognizer.com/v1/plate-reader/',
             headers={'Authorization': f'Token {PLATE_RECOGNIZER_TOKEN}'},
             files={'upload': ('plate.jpg', img_bytes, 'image/jpeg')},
             timeout=5
         )
-
         data = response.json()
         if data.get('results'):
             plate = data['results'][0]['plate'].upper()
@@ -165,33 +161,28 @@ def cloud_ocr(plate_crop):
 # ─────────────────────────────
 def hybrid_ocr(frame, bbox, yolo_confidence):
     plate_crop = crop_plate(frame, bbox)
-    cv2.imwrite("captures/last_crop.jpg",
-                cv2.cvtColor(plate_crop, cv2.COLOR_RGB2BGR))
+    if plate_crop.size > 0:
+        cv2.imwrite("captures/last_crop.jpg",
+                    cv2.cvtColor(plate_crop, cv2.COLOR_RGB2BGR))
 
-    # Check in-memory cache first
-    # (Redis will replace this in Objective 2)
+    # Clean expired cache entries
     now = time.time()
-    for plate, (cached_time, cached_text) in list(plate_cache.items()):
-        if now - cached_time > CACHE_TTL:
+    for plate in list(plate_cache.keys()):
+        if now - plate_cache[plate][0] > CACHE_TTL:
             del plate_cache[plate]
 
-    # Hybrid decision
     if yolo_confidence >= EDGE_CONF_THRESHOLD:
-        # High confidence — use edge OCR
         stats["edge_ocr"] += 1
         ocr_method = "EDGE"
         plate_text = edge_ocr(plate_crop)
     else:
-        # Low confidence — escalate to cloud
         stats["cloud_ocr"] += 1
         ocr_method = "CLOUD"
         plate_text = cloud_ocr(plate_crop)
-        # Fall back to edge if cloud fails
         if plate_text == "UNKNOWN":
             plate_text = edge_ocr(plate_crop)
             ocr_method = "EDGE-FB"
 
-    # Cache the result
     if plate_text != "UNKNOWN":
         plate_cache[plate_text] = (now, plate_text)
 
@@ -224,9 +215,30 @@ print("-" * 82)
 
 frame_count = 0
 detection_interval = 30
+car_present = False
 
 try:
     while True:
+        # ─────────────────────────────
+        # CHECK HC-SR04 FIRST
+        # ─────────────────────────────
+        distance = get_distance()
+
+        if distance is not None:
+            if distance <= 30 and not car_present:
+                car_present = True
+                print(f"\n🚗 CAR DETECTED at {distance}cm — activating camera...\n")
+            elif distance > 50:
+                car_present = False  # Car left
+
+        # Only run YOLO when car is present
+        if not car_present:
+            time.sleep(0.1)
+            continue
+
+        # ─────────────────────────────
+        # CAMERA + YOLO
+        # ─────────────────────────────
         frame = picam2.capture_array()
         frame_count += 1
 
@@ -246,21 +258,17 @@ try:
             yolo_conf = best["confidence"]
 
             if yolo_conf >= CLOUD_CONF_THRESHOLD:
-                # Run hybrid OCR
                 plate_text, ocr_method = hybrid_ocr(
                     frame, best["bbox"], yolo_conf)
-
-                # Behaviour module
                 decision, risk_score, flag = gate_decision(
                     plate_text, WHITELIST)
-
-                # Save frame
                 timestamp = time.strftime("%H%M%S")
                 cv2.imwrite(f"captures/frame_{timestamp}.jpg",
                            cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
-
                 print(f"{timestamp:<10} {plate_text:<12} {yolo_conf:.3f}{'':>3} "
                       f"{ocr_method:<8} {risk_score:<8.2f} {flag:<18} {decision}")
+                execute_decision(decision)
+                car_present = False  # Reset after decision made
             else:
                 stats["no_detection"] += 1
                 print(f"{time.strftime('%H%M%S'):<10} {'Low conf':<12} "
@@ -273,4 +281,5 @@ try:
 except KeyboardInterrupt:
     print("\n\nSystem stopped.")
     print_stats()
+    cleanup()
     picam2.stop()
