@@ -8,6 +8,7 @@ import time
 from picamera2 import Picamera2
 from behaviour import init_db, gate_decision
 from gate_control import execute_decision, cleanup, get_distance, car_detected
+from mqtt_client import publish_decision, publish_distance
 
 # ─────────────────────────────
 # CONFIG
@@ -268,6 +269,7 @@ try:
                 print(f"{timestamp:<10} {plate_text:<12} {yolo_conf:.3f}{'':>3} "
                       f"{ocr_method:<8} {risk_score:<8.2f} {flag:<18} {decision}")
                 execute_decision(decision)
+                publish_decision(decision, plate_text, risk_score)
                 car_present = False  # Reset after decision made
             else:
                 stats["no_detection"] += 1

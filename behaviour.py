@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from collections import Counter
 import math
 
+
 DB_PATH = "behaviour.db"
 
 # ─────────────────────────────────────────
@@ -13,7 +14,6 @@ def init_db():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     
-    # Every single entry gets logged here
     c.execute('''CREATE TABLE IF NOT EXISTS entry_log (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         plate_id TEXT NOT NULL,
@@ -25,7 +25,6 @@ def init_db():
         flag TEXT DEFAULT 'NORMAL'
     )''')
     
-    # One row per plate — gets updated over time
     c.execute('''CREATE TABLE IF NOT EXISTS vehicle_profile (
         plate_id TEXT PRIMARY KEY,
         visit_count INTEGER DEFAULT 0,
@@ -36,10 +35,58 @@ def init_db():
         last_seen TEXT,
         classification TEXT DEFAULT 'UNKNOWN'
     )''')
+
+    # NEW — Blacklist table
+    c.execute('''CREATE TABLE IF NOT EXISTS blacklist (
+        plate_id TEXT PRIMARY KEY,
+        reason TEXT DEFAULT 'Manual flag',
+        added_by TEXT DEFAULT 'admin',
+        added_at TEXT NOT NULL
+    )''')
     
     conn.commit()
     conn.close()
     print("Database initialized!")
+ 
+# ─────────────────────────────────────────
+# BLACKLIST MANAGEMENT
+# ─────────────────────────────────────────
+
+def add_to_blacklist(plate_id, reason="Suspicious behaviour", added_by="admin"):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    now = datetime.now().isoformat()
+    c.execute('''INSERT OR REPLACE INTO blacklist 
+        (plate_id, reason, added_by, added_at)
+        VALUES (?, ?, ?, ?)''',
+        (plate_id, reason, added_by, now))
+    conn.commit()
+    conn.close()
+    print(f"🚫 {plate_id} added to blacklist — {reason}")
+
+def remove_from_blacklist(plate_id):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute('DELETE FROM blacklist WHERE plate_id = ?', (plate_id,))
+    conn.commit()
+    conn.close()
+    print(f"✅ {plate_id} removed from blacklist")
+
+def is_blacklisted(plate_id):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute('SELECT reason FROM blacklist WHERE plate_id = ?', (plate_id,))
+    result = c.fetchone()
+    conn.close()
+    return result[0] if result else None
+
+def get_blacklist():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute('SELECT plate_id, reason, added_at FROM blacklist')
+    results = c.fetchall()
+    conn.close()
+    return results
 
 # ─────────────────────────────────────────
 # 2. LOG AN ENTRY
@@ -192,23 +239,30 @@ def calculate_risk_score(plate_id):
 # 5. ADAPTIVE GATE DECISION
 # ─────────────────────────────────────────
 def gate_decision(plate_id, whitelist):
+    # ── BLACKLIST CHECK FIRST ──
+    blacklist_reason = is_blacklisted(plate_id)
+    if blacklist_reason:
+        log_entry(plate_id, 0, 1.0, "BLACKLISTED")
+        update_profile(plate_id)
+        print(f"🚫 BLACKLISTED plate detected: {plate_id} — {blacklist_reason}")
+        return "DENY", 1.0, "BLACKLISTED"
+
     risk_score, flag = calculate_risk_score(plate_id)
     
     if plate_id in whitelist:
         if risk_score >= 0.7:
-            decision = "SLOW_OPEN"  # Known plate but suspicious behaviour
+            decision = "SLOW_OPEN"
         else:
-            decision = "AUTO_OPEN"  # Normal resident
+            decision = "AUTO_OPEN"
     else:
         if risk_score >= 0.7:
-            decision = "DENY"       # Unknown + high risk
+            decision = "DENY"
         elif risk_score >= 0.4:
-            decision = "LOG_ONLY"   # Unknown but medium risk
+            decision = "LOG_ONLY"
         else:
-            decision = "VISITOR_OPEN"  # Unknown but low risk visitor
+            decision = "VISITOR_OPEN"
     
-    # Log this entry
-    access_granted = 1 if decision in ["AUTO_OPEN", "SLOW_OPEN", 
+    access_granted = 1 if decision in ["AUTO_OPEN", "SLOW_OPEN",
                                         "VISITOR_OPEN"] else 0
     log_entry(plate_id, access_granted, risk_score, flag)
     update_profile(plate_id)
