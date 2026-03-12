@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Gate Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --bg: #0d0618;
+            --card: #1a0d2e;
+            --border: #3d1f6b;
+            --pink: #f472b6;
+            --pink2: #ec4899;
+            --pink3: #be185d;
+            --purple: #a855f7;
+            --purple2: #7c3aed;
+            --purple3: #5b21b6;
+            --lavender: #c084fc;
+            --text: #f5e6ff;
+            --muted: #9d7bb8;
+            --dim: #5c3d7a;
+            --green: #34d399;
+            --red: #f87171;
+            --yellow: #fbbf24;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'DM Sans', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            background-image:
+                radial-gradient(ellipse at 20% 10%, rgba(168,85,247,0.12) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 80%, rgba(244,114,182,0.10) 0%, transparent 50%);
+        }
+        header {
+            background: linear-gradient(135deg, #1a0533, #2d0f52, #1a0533);
+            border-bottom: 1px solid rgba(244,114,182,0.3);
+            padding: 18px 36px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 30px rgba(168,85,247,0.2);
+        }
+        .header-left { display: flex; align-items: center; gap: 14px; }
+        .header-logo {
+            width: 42px; height: 42px;
+            background: linear-gradient(135deg, var(--pink2), var(--purple2));
+            border-radius: 12px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 20px;
+            box-shadow: 0 0 20px rgba(244,114,182,0.4);
+        }
+        header h1 {
+            font-family: 'Playfair Display', serif;
+            font-size: 22px;
+            background: linear-gradient(135deg, var(--pink), var(--lavender));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        header .subtitle { font-size: 12px; color: var(--muted); margin-top: 2px; }
+        .live-pill {
+            display: flex; align-items: center; gap: 8px;
+            background: rgba(244,114,182,0.1);
+            border: 1px solid rgba(244,114,182,0.3);
+            border-radius: 20px;
+            padding: 6px 16px;
+            font-size: 12px; color: var(--pink);
+        }
+        .live-dot {
+            width: 7px; height: 7px;
+            background: var(--green);
+            border-radius: 50%;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+        .container { padding: 28px 32px; max-width: 1600px; margin: 0 auto; }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 14px; margin-bottom: 26px;
+        }
+        .stat-card {
+            background: var(--card);
+            border-radius: 16px; padding: 20px;
+            border: 1px solid var(--border);
+            position: relative; overflow: hidden;
+            transition: transform 0.2s;
+        }
+        .stat-card::before {
+            content: '';
+            position: absolute; top: 0; left: 0; right: 0; height: 3px;
+            background: linear-gradient(90deg, var(--pink2), var(--purple));
+        }
+        .stat-card:hover { transform: translateY(-3px); }
+        .stat-card.green-card::before { background: linear-gradient(90deg, var(--green), #059669); }
+        .stat-card.red-card::before { background: linear-gradient(90deg, var(--red), #dc2626); }
+        .stat-icon { font-size: 22px; margin-bottom: 10px; }
+        .stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px; }
+        .stat-value { font-size: 30px; font-weight: 700; color: var(--text); }
+        .stat-value.pink { color: var(--pink); }
+        .stat-value.purple { color: var(--lavender); }
+        .stat-sub { font-size: 11px; color: var(--dim); margin-top: 6px; }
+
+        .row { display: grid; gap: 20px; margin-bottom: 22px; }
+        .row-3 { grid-template-columns: 1fr 1fr 1fr; }
+        .row-2 { grid-template-columns: 1fr 1fr; }
+        .row-2-1 { grid-template-columns: 2fr 1fr; }
+
+        .card {
+            background: var(--card);
+            border-radius: 18px; padding: 22px;
+            border: 1px solid var(--border);
+        }
+        .card-title {
+            font-family: 'Playfair Display', serif;
+            font-size: 15px; color: var(--lavender);
+            margin-bottom: 18px; padding-bottom: 12px;
+            border-bottom: 1px solid rgba(168,85,247,0.2);
+            display: flex; align-items: center; gap: 8px;
+        }
+
+        /* GAUGE */
+        .gauge-wrap { display: flex; flex-direction: column; align-items: center; padding: 10px 0; }
+        .gauge-container { position: relative; width: 200px; height: 120px; margin-bottom: 12px; }
+        .gauge-value { position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); text-align: center; }
+        .gauge-number { font-size: 28px; font-weight: 700; color: var(--text); }
+        .gauge-label { font-size: 11px; color: var(--muted); }
+        .gauge-status { font-size: 13px; font-weight: 600; padding: 4px 16px; border-radius: 20px; margin-top: 8px; }
+        .gauge-low { background: rgba(52,211,153,0.15); color: var(--green); border: 1px solid rgba(52,211,153,0.3); }
+        .gauge-med { background: rgba(251,191,36,0.15); color: var(--yellow); border: 1px solid rgba(251,191,36,0.3); }
+        .gauge-high { background: rgba(248,113,113,0.15); color: var(--red); border: 1px solid rgba(248,113,113,0.3); }
+
+        /* FEED */
+        .feed-scroll { max-height: 340px; overflow-y: auto; }
+        .feed-item {
+            display: flex; align-items: center; gap: 10px;
+            padding: 9px 12px; border-radius: 10px; margin-bottom: 6px;
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(168,85,247,0.1);
+            font-size: 12px;
+        }
+        .feed-time { color: var(--dim); min-width: 65px; }
+        .feed-plate { font-weight: 700; min-width: 80px; }
+        .feed-class { color: var(--muted); min-width: 100px; }
+        .badge { padding: 3px 10px; border-radius: 20px; font-size: 10px; font-weight: 700; text-align: center; white-space: nowrap; }
+        .badge-auto    { background: rgba(52,211,153,0.15); color: #34d399; border: 1px solid rgba(52,211,153,0.3); }
+        .badge-visitor { background: rgba(244,114,182,0.15); color: #f472b6; border: 1px solid rgba(244,114,182,0.3); }
+        .badge-slow    { background: rgba(251,191,36,0.15); color: #fbbf24; border: 1px solid rgba(251,191,36,0.3); }
+        .badge-deny    { background: rgba(248,113,113,0.15); color: #f87171; border: 1px solid rgba(248,113,113,0.3); }
+        .badge-log     { background: rgba(168,85,247,0.15); color: #c084fc; border: 1px solid rgba(168,85,247,0.3); }
+        .risk-mini { font-size: 11px; margin-left: auto; }
+
+        /* BLACKLIST */
+        .bl-item {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 10px 14px; border-radius: 10px; margin-bottom: 8px;
+            background: rgba(248,113,113,0.05);
+            border: 1px solid rgba(248,113,113,0.2);
+            border-left: 3px solid var(--red);
+        }
+        .bl-plate { font-weight: 700; color: var(--red); font-size: 13px; }
+        .bl-reason { font-size: 11px; color: var(--muted); margin-top: 2px; }
+        .remove-btn {
+            background: rgba(248,113,113,0.15); color: var(--red);
+            border: 1px solid rgba(248,113,113,0.3);
+            padding: 4px 12px; border-radius: 8px; cursor: pointer; font-size: 11px;
+        }
+        .add-form { display: flex; gap: 8px; margin-top: 14px; }
+        .add-form input {
+            flex: 1; padding: 8px 12px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid var(--border);
+            border-radius: 10px; color: var(--text);
+            font-size: 12px; font-family: 'DM Sans', sans-serif;
+        }
+        .block-btn {
+            padding: 8px 16px;
+            background: linear-gradient(135deg, var(--pink3), var(--purple3));
+            color: white; border: none; border-radius: 10px;
+            cursor: pointer; font-size: 12px; font-weight: 600;
+        }
+
+        /* TABLE */
+        table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        th { text-align: left; padding: 10px 14px; color: var(--muted); font-size: 10px; text-transform: uppercase; border-bottom: 1px solid var(--border); }
+        td { padding: 11px 14px; border-bottom: 1px solid rgba(61,31,107,0.4); }
+        tr:hover td { background: rgba(168,85,247,0.05); }
+        .cls { padding: 3px 10px; border-radius: 6px; font-size: 10px; font-weight: 700; }
+        .cls-resident  { background: rgba(52,211,153,0.12); color: #34d399; }
+        .cls-frequent  { background: rgba(244,114,182,0.12); color: #f472b6; }
+        .cls-visitor   { background: rgba(168,85,247,0.12); color: #c084fc; }
+        .cls-unknown   { background: rgba(156,163,175,0.12); color: #9ca3af; }
+        .risk-bar { width: 80px; height: 5px; background: var(--border); border-radius: 3px; overflow: hidden; display: inline-block; }
+        .risk-fill { height: 100%; border-radius: 3px; }
+
+        .month-select {
+            background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+            border-radius: 8px; color: var(--text); padding: 4px 10px;
+            font-size: 12px; cursor: pointer; margin-left: auto;
+        }
+
+        @media (max-width: 1200px) {
+            .stats-grid { grid-template-columns: repeat(3,1fr); }
+            .row-3 { grid-template-columns: 1fr 1fr; }
+            .row-2-1 { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 768px) {
+            .stats-grid { grid-template-columns: repeat(2,1fr); }
+            .row-3, .row-2, .row-2-1 { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+<header>
+    <div class="header-left">
+        <div class="header-logo">🚗</div>
+        <div>
+            <h1>Smart Gate Control Dashboard</h1>
+            <div class="subtitle">IoT Based Smart Home Gate System — APU FYP</div>
+        </div>
+    </div>
+    <div class="live-pill">
+        <span class="live-dot"></span>
+        LIVE · Refreshing every 5s
+    </div>
+</header>
+
+<div class="container">
+
+    <!-- STATS -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-icon">🏆</div>
+            <div class="stat-label">Total Plates — All Time</div>
+            <div class="stat-value pink" id="total_alltime">—</div>
+            <div class="stat-sub">Objective 3 target: 300+</div>
+        </div>
+        <div class="stat-card green-card">
+            <div class="stat-icon">✅</div>
+            <div class="stat-label">Access Granted</div>
+            <div class="stat-value" id="granted_month">—</div>
+            <div class="stat-sub">this month</div>
+        </div>
+        <div class="stat-card red-card">
+            <div class="stat-icon">🚫</div>
+            <div class="stat-label">Access Denied</div>
+            <div class="stat-value" id="denied_month">—</div>
+            <div class="stat-sub">this month</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon">☁️</div>
+            <div class="stat-label">Cloud Reduction</div>
+            <div class="stat-value purple" id="cloud_reduction">—</div>
+            <div class="stat-sub">vs cloud-only baseline</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon">🏠</div>
+            <div class="stat-label">Known Residents</div>
+            <div class="stat-value" id="residents">—</div>
+            <div class="stat-sub">registered plates</div>
+        </div>
+        <div class="stat-card red-card">
+            <div class="stat-icon">⛔</div>
+            <div class="stat-label">Blacklisted</div>
+            <div class="stat-value" id="blacklisted_count">—</div>
+            <div class="stat-sub">permanently denied</div>
+        </div>
+    </div>
+
+    <!-- ROW 1: Gauge + Decisions + OCR -->
+    <div class="row row-3">
+        <div class="card">
+            <div class="card-title">🎯 Live Risk Gauge</div>
+            <div class="gauge-wrap">
+                <div class="gauge-container">
+                    <canvas id="gaugeCanvas" width="200" height="120"></canvas>
+                    <div class="gauge-value">
+                        <div class="gauge-number" id="gaugeNum">0.00</div>
+                        <div class="gauge-label">avg risk score</div>
+                    </div>
+                </div>
+                <div class="gauge-status gauge-low" id="gaugeStatus">LOW RISK</div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-title">🍩 Access Decisions — This Month</div>
+            <canvas id="decisionsChart"></canvas>
+        </div>
+        <div class="card">
+            <div class="card-title">🧠 OCR Method Usage</div>
+            <canvas id="ocrChart"></canvas>
+        </div>
+    </div>
+
+    <!-- ROW 2: Monthly + Classification -->
+    <div class="row row-2">
+        <div class="card">
+            <div class="card-title">
+                📅 Monthly Traffic
+                <select class="month-select" id="monthSelect" onchange="loadData()">
+                    <option value="2026-03">March 2026</option>
+                    <option value="2026-04">April 2026</option>
+                    <option value="2026-05">May 2026</option>
+                    <option value="2026-06">June 2026</option>
+                </select>
+            </div>
+            <canvas id="monthlyChart"></canvas>
+        </div>
+        <div class="card">
+            <div class="card-title">🚘 Vehicle Classification Breakdown</div>
+            <canvas id="classChart"></canvas>
+        </div>
+    </div>
+
+    <!-- ROW 3: Risk History -->
+    <div class="row">
+        <div class="card">
+            <div class="card-title">📈 Risk Score History — Last 50 Detections</div>
+            <canvas id="riskChart"></canvas>
+        </div>
+    </div>
+
+    <!-- ROW 4: Feed + Blacklist -->
+    <div class="row row-2-1">
+        <div class="card">
+            <div class="card-title">🟢 Live Decision Feed</div>
+            <div class="feed-scroll" id="feed">Loading...</div>
+        </div>
+        <div class="card">
+            <div class="card-title">🚫 Blacklist Manager</div>
+            <div id="blItems" style="max-height:280px;overflow-y:auto">Loading...</div>
+            <div class="add-form">
+                <input type="text" id="newPlate" placeholder="Plate e.g. XYZ123">
+                <input type="text" id="newReason" placeholder="Reason">
+                <button class="block-btn" onclick="addBlacklist()">Block</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ROW 5: Profiles -->
+    <div class="card" style="margin-bottom:30px">
+        <div class="card-title">📋 Vehicle Profiles — All Time</div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Plate</th><th>Classification</th><th>Visits</th>
+                    <th>Avg Entry Hour</th><th>Last Seen</th><th>Risk Score</th>
+                </tr>
+            </thead>
+            <tbody id="profilesTable"><tr><td colspan="6" style="text-align:center;color:#5c3d7a;padding:20px">Loading...</td></tr></tbody>
+        </table>
+    </div>
+
+</div>
+
+<script>
+var decisionsChart = null;
+var ocrChart = null;
+var monthlyChart = null;
+var classChart = null;
+var riskChart = null;
+var gaugeVal = 0;
+var gaugeTarget = 0;
+
+// GAUGE
+var gCanvas = document.getElementById('gaugeCanvas');
+var gCtx = gCanvas.getContext('2d');
+
+function drawGauge(val) {
+    gCtx.clearRect(0, 0, 200, 120);
+    var cx = 100, cy = 105, r = 80;
+
+    // Background track
+    gCtx.beginPath();
+    gCtx.arc(cx, cy, r, Math.PI, 0);
+    gCtx.lineWidth = 16;
+    gCtx.strokeStyle = '#3d1f6b';
+    gCtx.lineCap = 'round';
+    gCtx.stroke();
+
+    // Colored arc
+    var grad = gCtx.createLinearGradient(20, 0, 180, 0);
+    grad.addColorStop(0, '#34d399');
+    grad.addColorStop(0.5, '#fbbf24');
+    grad.addColorStop(1, '#f87171');
+    var endAngle = Math.PI + (val * Math.PI);
+    gCtx.beginPath();
+    gCtx.arc(cx, cy, r, Math.PI, endAngle);
+    gCtx.lineWidth = 16;
+    gCtx.strokeStyle = grad;
+    gCtx.lineCap = 'round';
+    gCtx.stroke();
+
+    // Needle
+    var needleAngle = Math.PI + (val * Math.PI);
+    var nx = cx + Math.cos(needleAngle) * 58;
+    var ny = cy + Math.sin(needleAngle) * 58;
+    gCtx.beginPath();
+    gCtx.moveTo(cx, cy);
+    gCtx.lineTo(nx, ny);
+    gCtx.lineWidth = 3;
+    gCtx.strokeStyle = '#f472b6';
+    gCtx.lineCap = 'round';
+    gCtx.stroke();
+
+    // Center dot
+    gCtx.beginPath();
+    gCtx.arc(cx, cy, 7, 0, Math.PI * 2);
+    gCtx.fillStyle = '#f472b6';
+    gCtx.fill();
+}
+
+function animateGauge() {
+    gaugeVal += (gaugeTarget - gaugeVal) * 0.05;
+    drawGauge(gaugeVal);
+    requestAnimationFrame(animateGauge);
+}
+animateGauge();
+
+function setGauge(val) {
+    gaugeTarget = Math.min(Math.max(val, 0), 1);
+    document.getElementById('gaugeNum').textContent = val.toFixed(2);
+    var s = document.getElementById('gaugeStatus');
+    if (val >= 0.7) {
+        s.className = 'gauge-status gauge-high';
+        s.textContent = 'HIGH RISK';
+    } else if (val >= 0.4) {
+        s.className = 'gauge-status gauge-med';
+        s.textContent = 'MEDIUM RISK';
+    } else {
+        s.className = 'gauge-status gauge-low';
+        s.textContent = 'LOW RISK';
+    }
+}
+
+function getBadgeClass(d) {
+    if (d === 'AUTO_OPEN') return 'badge-auto';
+    if (d === 'VISITOR_OPEN') return 'badge-visitor';
+    if (d === 'SLOW_OPEN') return 'badge-slow';
+    if (d === 'DENY') return 'badge-deny';
+    return 'badge-log';
+}
+
+function getRiskColor(r) {
+    if (r >= 0.7) return '#f87171';
+    if (r >= 0.4) return '#fbbf24';
+    return '#34d399';
+}
+
+function getClsCss(c) {
+    if (c === 'RESIDENT') return 'cls-resident';
+    if (c === 'FREQUENT_VISITOR') return 'cls-frequent';
+    if (c === 'VISITOR') return 'cls-visitor';
+    return 'cls-unknown';
+}
+
+var legendOpts = {
+    display: true,
+    labels: { color: '#9d7bb8', font: { size: 11 }, boxWidth: 12 }
+};
+
+function loadData() {
+    var month = document.getElementById('monthSelect').value;
+    fetch('/api/data?month=' + month)
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+
+            // Stats
+            document.getElementById('total_alltime').textContent = d.total_alltime;
+            document.getElementById('granted_month').textContent = d.granted_month;
+            document.getElementById('denied_month').textContent = d.denied_month;
+            document.getElementById('cloud_reduction').textContent = d.cloud_reduction + '%';
+            document.getElementById('residents').textContent = d.residents;
+            document.getElementById('blacklisted_count').textContent = d.blacklisted_count;
+
+            // Gauge
+            setGauge(d.avg_risk);
+
+            // Feed
+            var feed = document.getElementById('feed');
+            if (!d.recent_entries.length) {
+                feed.innerHTML = '<p style="color:#5c3d7a;text-align:center;padding:30px">No entries yet</p>';
+            } else {
+                var html = '';
+                for (var i = 0; i < d.recent_entries.length; i++) {
+                    var e = d.recent_entries[i];
+                    html += '<div class="feed-item">';
+                    html += '<span class="feed-time">' + e.time + '</span>';
+                    html += '<span class="feed-plate">' + e.plate + '</span>';
+                    html += '<span class="feed-class">' + e.classification + '</span>';
+                    html += '<span class="badge ' + getBadgeClass(e.decision) + '">' + e.decision.replace(/_/g,' ') + '</span>';
+                    html += '<span class="risk-mini" style="color:' + getRiskColor(e.risk) + '">' + e.risk.toFixed(2) + '</span>';
+                    html += '</div>';
+                }
+                feed.innerHTML = html;
+            }
+
+            // Blacklist
+            var bl = document.getElementById('blItems');
+            if (!d.blacklist.length) {
+                bl.innerHTML = '<p style="color:#5c3d7a;font-size:12px">No blacklisted plates</p>';
+            } else {
+                var bhtml = '';
+                for (var i = 0; i < d.blacklist.length; i++) {
+                    var b = d.blacklist[i];
+                    bhtml += '<div class="bl-item">';
+                    bhtml += '<div><div class="bl-plate">' + b.plate + '</div>';
+                    bhtml += '<div class="bl-reason">' + b.reason + '</div></div>';
+                    bhtml += '<button class="remove-btn" onclick="removeBlacklist(\'' + b.plate + '\')">Remove</button>';
+                    bhtml += '</div>';
+                }
+                bl.innerHTML = bhtml;
+            }
+
+            // Profiles
+            var tbody = document.getElementById('profilesTable');
+            var phtml = '';
+            for (var i = 0; i < d.profiles.length; i++) {
+                var p = d.profiles[i];
+                phtml += '<tr>';
+                phtml += '<td><strong>' + p.plate + '</strong></td>';
+                phtml += '<td><span class="cls ' + getClsCss(p.classification) + '">' + p.classification.replace(/_/g,' ') + '</span></td>';
+                phtml += '<td>' + p.visits + '</td>';
+                phtml += '<td>' + p.avg_hour.toFixed(1) + ':00</td>';
+                phtml += '<td>' + p.last_seen + '</td>';
+                phtml += '<td><div class="risk-bar"><div class="risk-fill" style="width:' + (p.risk*100) + '%;background:' + getRiskColor(p.risk) + '"></div></div> ' + p.risk.toFixed(2) + '</td>';
+                phtml += '</tr>';
+            }
+            tbody.innerHTML = phtml;
+
+            // CHARTS
+            if (decisionsChart) decisionsChart.destroy();
+            decisionsChart = new Chart(document.getElementById('decisionsChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: ['AUTO OPEN','VISITOR OPEN','SLOW OPEN','DENY','LOG ONLY'],
+                    datasets: [{
+                        data: [
+                            d.decision_counts.AUTO_OPEN || 0,
+                            d.decision_counts.VISITOR_OPEN || 0,
+                            d.decision_counts.SLOW_OPEN || 0,
+                            d.decision_counts.DENY || 0,
+                            d.decision_counts.LOG_ONLY || 0
+                        ],
+                        backgroundColor: ['#34d399','#f472b6','#fbbf24','#f87171','#a855f7'],
+                        borderWidth: 0
+                    }]
+                },
+                options: { plugins: { legend: legendOpts }, cutout: '65%' }
+            });
+
+            if (ocrChart) ocrChart.destroy();
+            ocrChart = new Chart(document.getElementById('ocrChart'), {
+                type: 'pie',
+                data: {
+                    labels: ['Edge (Tesseract)','Cloud (PlateRecognizer)','Edge Fallback'],
+                    datasets: [{
+                        data: [d.ocr_edge || 0, d.ocr_cloud || 0, d.ocr_fallback || 0],
+                        backgroundColor: ['#a855f7','#f472b6','#c084fc'],
+                        borderWidth: 0
+                    }]
+                },
+                options: { plugins: { legend: legendOpts } }
+            });
+
+            var days = Object.keys(d.monthly_daily).sort();
+            var dayLabels = [];
+            var dayData = [];
+            for (var i = 0; i < days.length; i++) {
+                dayLabels.push(days[i].slice(5));
+                dayData.push(d.monthly_daily[days[i]]);
+            }
+            if (monthlyChart) monthlyChart.destroy();
+            monthlyChart = new Chart(document.getElementById('monthlyChart'), {
+                type: 'bar',
+                data: {
+                    labels: dayLabels,
+                    datasets: [{
+                        label: 'Vehicles',
+                        data: dayData,
+                        backgroundColor: 'rgba(168,85,247,0.6)',
+                        borderColor: '#a855f7',
+                        borderWidth: 1,
+                        borderRadius: 5
+                    }]
+                },
+                options: {
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { ticks: { color: '#5c3d7a' }, grid: { color: 'rgba(61,31,107,0.3)' } },
+                        y: { ticks: { color: '#5c3d7a' }, grid: { color: 'rgba(61,31,107,0.3)' }, beginAtZero: true }
+                    }
+                }
+            });
+
+            if (classChart) classChart.destroy();
+            classChart = new Chart(document.getElementById('classChart'), {
+                type: 'bar',
+                data: {
+                    labels: ['RESIDENT','FREQUENT VISITOR','VISITOR','UNKNOWN','BLACKLISTED'],
+                    datasets: [{
+                        data: [
+                            d.class_counts.RESIDENT || 0,
+                            d.class_counts.FREQUENT_VISITOR || 0,
+                            d.class_counts.VISITOR || 0,
+                            d.class_counts.UNKNOWN || 0,
+                            d.class_counts.BLACKLISTED || 0
+                        ],
+                        backgroundColor: ['#34d399','#f472b6','#a855f7','#9ca3af','#f87171'],
+                        borderWidth: 0,
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { ticks: { color: '#5c3d7a', font: { size: 10 } }, grid: { display: false } },
+                        y: { ticks: { color: '#5c3d7a' }, grid: { color: 'rgba(61,31,107,0.3)' }, beginAtZero: true }
+                    }
+                }
+            });
+
+            var rLabels = [];
+            for (var i = 1; i <= d.risk_history.length; i++) { rLabels.push(i); }
+            if (riskChart) riskChart.destroy();
+            riskChart = new Chart(document.getElementById('riskChart'), {
+                type: 'line',
+                data: {
+                    labels: rLabels,
+                    datasets: [{
+                        label: 'Risk Score',
+                        data: d.risk_history,
+                        borderColor: '#f472b6',
+                        backgroundColor: 'rgba(244,114,182,0.08)',
+                        borderWidth: 2,
+                        pointRadius: 3,
+                        pointBackgroundColor: '#f472b6',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { ticks: { color: '#5c3d7a' }, grid: { color: 'rgba(61,31,107,0.2)' } },
+                        y: { min: 0, max: 1, ticks: { color: '#5c3d7a' }, grid: { color: 'rgba(61,31,107,0.2)' } }
+                    }
+                }
+            });
+
+        })
+        .catch(function(err) {
+            console.error('Error loading data:', err);
+        });
+}
+
+function addBlacklist() {
+    var plate = document.getElementById('newPlate').value.trim().toUpperCase();
+    var reason = document.getElementById('newReason').value.trim();
+    if (!plate) { alert('Enter a plate number'); return; }
+    fetch('/api/blacklist/add', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({plate: plate, reason: reason || 'Manual block'})
+    }).then(function() {
+        document.getElementById('newPlate').value = '';
+        document.getElementById('newReason').value = '';
+        loadData();
+    });
+}
+
+function removeBlacklist(plate) {
+    if (!confirm('Remove ' + plate + ' from blacklist?')) return;
+    fetch('/api/blacklist/remove', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({plate: plate})
+    }).then(function() { loadData(); });
+}
+
+loadData();
+setInterval(loadData, 5000);
+</script>
+</body>
+</html>
