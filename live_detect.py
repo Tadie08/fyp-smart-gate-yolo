@@ -14,13 +14,13 @@ from mqtt_client import publish_decision, publish_distance
 # CONFIG
 # ─────────────────────────────
 MODEL_PATH = "models/best_nano.onnx"
-EDGE_CONF_THRESHOLD = 0.75
-CLOUD_CONF_THRESHOLD = 0.30
+EDGE_CONF_THRESHOLD = 0.40
+CLOUD_CONF_THRESHOLD = 0.20
 IMG_SIZE = 640
 
 PLATE_RECOGNIZER_TOKEN = "e8628359fce05e8b1ef7f79a7de7d9e76dbe49ea"
 
-WHITELIST = ["ABC123", "ML773", "TX8971", "YZ3527"]
+WHITELIST = ["ABC123", "ML773", "TADI001", "YZ3527", "WXY590"]
 
 stats = {
     "total": 0,
@@ -122,11 +122,10 @@ def edge_ocr(plate_crop):
                                     cv2.THRESH_BINARY, 11, 2)
     config = '--psm 7 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
     results = []
-    for thresh in [thresh1, thresh2, thresh3]:
-        text = pytesseract.image_to_string(thresh, config=config).strip()
-        text = ''.join(c for c in text.upper() if c.isalnum())
-        if len(text) >= 3:
-            results.append(text)
+    text = pytesseract.image_to_string(thresh1, config=config).strip()
+    text = ''.join(c for c in text.upper() if c.isalnum())
+    if len(text) >= 3:
+        results.append(text)
     if not results:
         return "UNKNOWN"
     from collections import Counter
@@ -172,6 +171,12 @@ def hybrid_ocr(frame, bbox, yolo_confidence):
         if now - plate_cache[plate][0] > CACHE_TTL:
             del plate_cache[plate]
 
+    # Check cache first — return immediately if plate seen within TTL
+    for cached_plate, (cached_time, cached_text) in plate_cache.items():
+        if now - cached_time <= CACHE_TTL:
+            stats["cache_hits"] += 1
+            return cached_text, "CACHE"
+
     if yolo_confidence >= EDGE_CONF_THRESHOLD:
         stats["edge_ocr"] += 1
         ocr_method = "EDGE"
@@ -189,6 +194,7 @@ def hybrid_ocr(frame, bbox, yolo_confidence):
 
     return plate_text, ocr_method
 
+
 # ─────────────────────────────
 # PRINT STATS
 # ─────────────────────────────
@@ -198,10 +204,12 @@ def print_stats():
         return
     cloud_pct = (stats["cloud_ocr"] / total) * 100
     edge_pct = (stats["edge_ocr"] / total) * 100
+    cache_pct = (stats["cache_hits"] / total) * 100
     reduction = 100 - cloud_pct
     print(f"\n{'='*60}")
     print(f"  HYBRID SCHEDULER STATS")
     print(f"  Total detections : {total}")
+    print(f"  Cache hits       : {stats['cache_hits']} ({cache_pct:.1f}%)")
     print(f"  Edge OCR         : {stats['edge_ocr']} ({edge_pct:.1f}%)")
     print(f"  Cloud OCR        : {stats['cloud_ocr']} ({cloud_pct:.1f}%)")
     print(f"  Cloud reduction  : {reduction:.1f}% vs cloud-only baseline")
@@ -215,7 +223,7 @@ print(f"{'Time':<10} {'Plate':<12} {'Conf':<8} {'OCR':<8} {'Risk':<8} {'Flag':<1
 print("-" * 82)
 
 frame_count = 0
-detection_interval = 30
+detection_interval = 5
 car_present = False
 
 try:
@@ -226,10 +234,10 @@ try:
         distance = get_distance()
 
         if distance is not None:
-            if distance <= 30 and not car_present:
+            if distance <= 20 and not car_present:
                 car_present = True
                 print(f"\n🚗 CAR DETECTED at {distance}cm — activating camera...\n")
-            elif distance > 50:
+            elif distance > 25:
                 car_present = False  # Car left
 
         # Only run YOLO when car is present
@@ -241,28 +249,40 @@ try:
         # CAMERA + YOLO
         # ─────────────────────────────
         frame = picam2.capture_array()
+        # Sharpen frame for better OCR
+        kernel = np.array([[0,-1,0],[-1,5,-1],[0,-1,0]])
+        frame = cv2.filter2D(frame, -1, kernel)
         frame_count += 1
 
         if frame_count % detection_interval != 0:
             continue
 
-        start = time.time()
+        t_start = time.time()
         input_data = preprocess(frame)
         outputs = session.run(None, {input_name: input_data})
         detections = postprocess(outputs)
-        latency = (time.time() - start) * 1000
+        t_yolo = time.time()
+        yolo_ms = (t_yolo - t_start) * 1000
+        latency = yolo_ms
 
         stats["total"] += 1
 
         if detections:
             best = max(detections, key=lambda x: x["confidence"])
             yolo_conf = best["confidence"]
+            print(f"DEBUG confidence: {yolo_conf:.3f}")
 
             if yolo_conf >= CLOUD_CONF_THRESHOLD:
                 plate_text, ocr_method = hybrid_ocr(
                     frame, best["bbox"], yolo_conf)
+                t_ocr = time.time()
+                ocr_ms = (t_ocr - t_yolo) * 1000
                 decision, risk_score, flag = gate_decision(
                     plate_text, WHITELIST)
+                t_decision = time.time()
+                decision_ms = (t_decision - t_ocr) * 1000
+                total_ms = (t_decision - t_start) * 1000
+                print(f"⏱️  YOLO:{yolo_ms:.1f}ms | OCR:{ocr_ms:.1f}ms | Decision:{decision_ms:.1f}ms | TOTAL:{total_ms:.1f}ms | {'✅' if total_ms < 150 else '❌'}")
                 timestamp = time.strftime("%H%M%S")
                 cv2.imwrite(f"captures/frame_{timestamp}.jpg",
                            cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))

@@ -224,13 +224,19 @@ def calculate_risk_score(plate_id):
     # Cap risk at 1.0
     risk = min(1.0, risk)
     
-    # Determine final flag
-    if risk >= 0.7:
-        flag = "HIGH_RISK"
-    elif risk >= 0.4:
-        flag = "MEDIUM_RISK"
+    # Preserve specific anomaly flag, append risk level
+    if flag == "NORMAL":
+        if risk >= 0.7:
+            flag = "HIGH_RISK"
+        elif risk >= 0.4:
+            flag = "MEDIUM_RISK"
+        else:
+            flag = "LOW_RISK"
     else:
-        flag = "LOW_RISK"
+        # Keep specific flag (UNUSUAL_TIME, UNUSUAL_DAY, HIGH_FREQUENCY)
+        # but upgrade to LOW_RISK if score ended up low after resident bonus
+        if risk < 0.4 and flag not in ("UNKNOWN_PLATE",):
+            pass  # keep specific flag, score tells the rest
     
     conn.close()
     return round(risk, 2), flag
@@ -238,18 +244,22 @@ def calculate_risk_score(plate_id):
 # ─────────────────────────────────────────
 # 5. ADAPTIVE GATE DECISION
 # ─────────────────────────────────────────
-def gate_decision(plate_id, whitelist):
+
+def gate_decision(plate_id, whitelist, dry_run=False):
     # ── BLACKLIST CHECK FIRST ──
     blacklist_reason = is_blacklisted(plate_id)
     if blacklist_reason:
-        log_entry(plate_id, 0, 1.0, "BLACKLISTED")
-        update_profile(plate_id)
+        if not dry_run:
+            log_entry(plate_id, 0, 1.0, "BLACKLISTED")
+            update_profile(plate_id)
         print(f"🚫 BLACKLISTED plate detected: {plate_id} — {blacklist_reason}")
         return "DENY", 1.0, "BLACKLISTED"
 
     risk_score, flag = calculate_risk_score(plate_id)
-    
-    if plate_id in whitelist:
+
+    if plate_id == "UNKNOWN":
+        decision = "DENY"
+    elif plate_id in whitelist:
         if risk_score >= 0.7:
             decision = "SLOW_OPEN"
         else:
@@ -261,12 +271,13 @@ def gate_decision(plate_id, whitelist):
             decision = "LOG_ONLY"
         else:
             decision = "VISITOR_OPEN"
-    
-    access_granted = 1 if decision in ["AUTO_OPEN", "SLOW_OPEN",
-                                        "VISITOR_OPEN"] else 0
-    log_entry(plate_id, access_granted, risk_score, flag)
-    update_profile(plate_id)
-    
+
+    access_granted = 1 if decision in ["AUTO_OPEN", "SLOW_OPEN", "VISITOR_OPEN"] else 0
+
+    if not dry_run:
+        log_entry(plate_id, access_granted, risk_score, flag)
+        update_profile(plate_id)
+
     return decision, risk_score, flag
 
 # ─────────────────────────────────────────
