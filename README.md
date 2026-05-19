@@ -8,23 +8,23 @@ with MQTT integration, anomaly detection, and a real-time dashboard.
 ## 📸 Project Images
 
 ### 🔧 Smart Gate System
-![Smart Gate System](media/Smart%20Gate%20Sytem.jpeg)
+![Smart Gate System](Smart_Gate_Sytem.jpeg)
 
 ### ⚙️ Gate System Hardware
-![Hardware](media/Gate%20System%20Hardware.jpeg)
+![Hardware](Gate%20System%20Hardware.jpeg)
 
 ### 🔒 Closed Gate
-![Closed Gate](media/Gate%20System%20Closed%20Gate.jpeg)
+![Closed Gate](Gate_System_Closed_Gate.jpeg)
 
 ### ✅ Opened Gate
-![Opened Gate](media/Opened%20Gate.jpeg)
+![Opened Gate](Opened_Gate.jpeg)
 
 ### 📊 Dashboard
-![Dashboard](media/Dashboard%20Image%20.jpeg)
-![Dashboard 1](media/Dashboard%20Image%201.jpeg)
-![Dashboard 2](media/Dashboard%20Image%202.png)
-![Dashboard 3](media/Dashboard%20Image%203.png)
-![Dashboard 4](media/Dashboard%20Image%204.png)
+![Dashboard](Dashboard_Image.jpeg)
+![Dashboard 1](Dashboard_Image_1.jpeg)
+![Dashboard 2](Dashboard_Image_2.png)
+![Dashboard 3](Dashboard_Image_3.png)
+![Dashboard 4](Dashboard_Image_4.png)
 
 ---
 
