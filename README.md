@@ -11,7 +11,7 @@ with MQTT integration, anomaly detection, and a real-time dashboard.
 ![Smart Gate System](Smart_Gate_Sytem.jpeg)
 
 ### ⚙️ Gate System Hardware
-![Hardware](Gate%20System%20Hardware.jpeg)
+![Hardware](Gate_System_Hardware.jpeg)
 
 ### 🔒 Closed Gate
 ![Closed Gate](Gate_System_Closed_Gate.jpeg)
